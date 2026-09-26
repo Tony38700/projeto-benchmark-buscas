@@ -243,9 +243,9 @@ def simulated_annealing(
     distancias,
     rng,
     temperatura_inicial=1000,
-    taxa_resfriamento=0.995,
+    taxa_resfriamento=0.9,
     temperatura_minima=1e-3,
-    iter_max=600
+    iter_max=1000
 ):
 
     rota_atual = rota_inicial.copy()
@@ -343,10 +343,10 @@ def simulated_annealing_reaquecimento(
     distancias,
     rng,
     temperatura_inicial=1000,
-    taxa_resfriamento=0.995,
+    taxa_resfriamento=0.91,
     temperatura_minima=1e-3,
-    iter_max=600,
-    reaquecimento=3
+    iter_max=1000,
+    reaquecimento=10
 ):
 
     rota_atual = rota_inicial.copy()
