@@ -1,3 +1,4 @@
+import argparse
 import csv
 import heapq
 import time
@@ -11,11 +12,11 @@ import os
 
 # (tamanho_do_tabuleiro, quantidade_de_tabuleiros)
 CONFIGURACOES = [
-    #(3, 100),
-    (4, 1),
+    (3, 200),
+    #(4, 1),
 ]
 
-ARQUIVO_RESULTADOS = "resultados_heuristicas.csv"
+ARQUIVO_RESULTADOS = os.path.join("resultados", "resultados_heuristicas.csv")
 
 # Seed mestre do experimento.
 #
@@ -279,12 +280,15 @@ def busca_gulosa(
     }
 
     pais = {}
+    nos_expandidos = 0
 
     while fila:
 
         _, _, atual = heapq.heappop(
             fila
         )
+
+        nos_expandidos += 1
 
         if atual == objetivo:
 
@@ -294,7 +298,7 @@ def busca_gulosa(
                 objetivo
             )
 
-            return caminho
+            return caminho, nos_expandidos
 
         for vizinho in gerar_vizinhos(
             atual,
@@ -325,7 +329,7 @@ def busca_gulosa(
                 )
             )
 
-    return None
+    return None, nos_expandidos
 
 
 # ============================================================
@@ -364,12 +368,15 @@ def busca_a_estrela(
     }
 
     pais = {}
+    nos_expandidos = 0
 
     while fila:
 
         _, _, atual = heapq.heappop(
             fila
         )
+
+        nos_expandidos += 1
 
         if atual == objetivo:
 
@@ -379,7 +386,7 @@ def busca_a_estrela(
                 objetivo
             )
 
-            return caminho
+            return caminho, nos_expandidos
 
         g_atual = custos[atual]
 
@@ -419,7 +426,7 @@ def busca_a_estrela(
                     )
                 )
 
-    return None
+    return None, nos_expandidos
 
 
 # ============================================================
@@ -442,7 +449,11 @@ def ida_estrela(
         estado_inicial
     ]
 
+    nos_expandidos = 0
+
     def busca(profundidade, limite_atual):
+
+        nonlocal nos_expandidos
 
         estado = caminho[-1]
 
@@ -456,6 +467,8 @@ def ida_estrela(
 
         if f > limite_atual:
             return f
+
+        nos_expandidos += 1
 
         if estado == objetivo:
             return True
@@ -495,12 +508,50 @@ def ida_estrela(
         )
 
         if resultado is True:
-            return caminho.copy()
+            return caminho.copy(), nos_expandidos
 
         if resultado == float("inf"):
-            return None
+            return None, nos_expandidos
 
         limite = resultado
+
+
+# ============================================================
+# SERIALIZAÇÃO DO CAMINHO
+# ============================================================
+
+def serializar_caminho(caminho, n):
+    """
+    Converte a sequência de estados para uma única string
+    adequada para armazenamento no CSV.
+
+    Exemplo 3x3:
+        1,2,3/4,0,6/7,5,8;1,2,3/4,5,6/7,0,8;...
+    """
+
+    if caminho is None:
+        return ""
+
+    estados = []
+
+    for estado in caminho:
+
+        linhas = []
+
+        for i in range(0, len(estado), n):
+
+            linha = ",".join(
+                str(valor)
+                for valor in estado[i:i + n]
+            )
+
+            linhas.append(linha)
+
+        estados.append(
+            "/".join(linhas)
+        )
+
+    return ";".join(estados)
 
 
 # ============================================================
@@ -517,7 +568,7 @@ def executar_busca(
 
     inicio = time.perf_counter()
 
-    caminho = funcao(
+    caminho, nos_expandidos = funcao(
         estado_inicial,
         objetivo,
         n
@@ -535,23 +586,54 @@ def executar_busca(
 
         resolvido = False
 
+        caminho_serializado = ""
+
     else:
 
         movimentos = len(caminho) - 1
 
         resolvido = True
 
+        caminho_serializado = serializar_caminho(
+            caminho,
+            n
+        )
+
     return {
         "algoritmo": nome,
         "resolvido": resolvido,
         "movimentos": movimentos,
-        "tempo_ms": tempo
+        "nos_expandidos": nos_expandidos,
+        "tempo_ms": tempo,
+        "caminho": caminho_serializado
     }
+
+
+# ============================================================
+# ARGUMENTOS DA LINHA DE COMANDO
+# ============================================================
+
+parser = argparse.ArgumentParser(
+    description="Executa experimentos de buscas heurísticas no N-Puzzle."
+)
+
+parser.add_argument(
+    "--modo",
+    choices=["concatenar", "sobrescrever"],
+    default="concatenar",
+    help=(
+        "Define como salvar os resultados. "
+        "O padrão é concatenar."
+    )
+)
+
+args = parser.parse_args()
 
 
 # ============================================================
 # EXECUÇÃO DO EXPERIMENTO
 # ============================================================
+
 
 print("=" * 70)
 print("EXPERIMENTO - BUSCAS HEURÍSTICAS NO 8-PUZZLE")
@@ -569,6 +651,11 @@ print(
 print(
     f"Arquivo de resultados: "
     f"{ARQUIVO_RESULTADOS}"
+)
+
+print(
+    f"Modo de salvamento: "
+    f"{args.modo}"
 )
 
 
@@ -593,7 +680,9 @@ cabecalho = [
     "seed",
     "resolvido",
     "movimentos",
-    "tempo_ms"
+    "nos_expandidos",
+    "tempo_ms",
+    "caminho"
 ]
 
 
@@ -668,7 +757,9 @@ for n, quantidade in CONFIGURACOES:
             "seed": seed_tabuleiro,
             "resolvido": resultado["resolvido"],
             "movimentos": resultado["movimentos"],
-            "tempo_ms": resultado["tempo_ms"]
+            "nos_expandidos": resultado["nos_expandidos"],
+            "tempo_ms": resultado["tempo_ms"],
+            "caminho": resultado["caminho"]
         })
 
         # ====================================================
@@ -691,7 +782,9 @@ for n, quantidade in CONFIGURACOES:
             "seed": seed_tabuleiro,
             "resolvido": resultado["resolvido"],
             "movimentos": resultado["movimentos"],
-            "tempo_ms": resultado["tempo_ms"]
+            "nos_expandidos": resultado["nos_expandidos"],
+            "tempo_ms": resultado["tempo_ms"],
+            "caminho": resultado["caminho"]
         })
 
         # ====================================================
@@ -714,7 +807,9 @@ for n, quantidade in CONFIGURACOES:
             "seed": seed_tabuleiro,
             "resolvido": resultado["resolvido"],
             "movimentos": resultado["movimentos"],
-            "tempo_ms": resultado["tempo_ms"]
+            "nos_expandidos": resultado["nos_expandidos"],
+            "tempo_ms": resultado["tempo_ms"],
+            "caminho": resultado["caminho"]
         })
 
 
@@ -722,11 +817,24 @@ for n, quantidade in CONFIGURACOES:
 # SALVAR CSV
 # ============================================================
 
-arquivo_existe = os.path.exists(ARQUIVO_RESULTADOS)
+os.makedirs(
+    os.path.dirname(ARQUIVO_RESULTADOS),
+    exist_ok=True
+)
+
+modo_arquivo = (
+    "w"
+    if args.modo == "sobrescrever"
+    else "a"
+)
+
+arquivo_existe = os.path.exists(
+    ARQUIVO_RESULTADOS
+)
 
 with open(
     ARQUIVO_RESULTADOS,
-    "a",
+    modo_arquivo,
     newline="",
     encoding="utf-8"
 ) as arquivo:
@@ -736,10 +844,15 @@ with open(
         fieldnames=cabecalho
     )
 
-    if not arquivo_existe:
+    if (
+        args.modo == "sobrescrever"
+        or not arquivo_existe
+    ):
         escritor.writeheader()
 
-    escritor.writerows(resultados)
+    escritor.writerows(
+        resultados
+    )
 
 
 # ============================================================
@@ -798,10 +911,17 @@ for n, quantidade in CONFIGURACOES:
             if resultado["movimentos"] is not None
         ]
 
+        nos_expandidos = [
+            resultado["nos_expandidos"]
+            for resultado in registros
+        ]
+
         print(
             f"  {algoritmo}: "
             f"tempo médio = "
             f"{np.mean(tempos):.3f} ms | "
             f"movimentos médios = "
-            f"{np.mean(movimentos):.2f}"
+            f"{np.mean(movimentos):.2f} | "
+            f"nós expandidos médios = "
+            f"{np.mean(nos_expandidos):.2f}"
         )

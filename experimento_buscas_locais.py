@@ -1,5 +1,7 @@
+import argparse
 import json
 import csv
+import os
 import time
 import numpy as np
 
@@ -8,9 +10,9 @@ import numpy as np
 # CONFIGURAÇÕES
 # ============================================================
 
-ARQUIVO_TSP = "ulysses16.json"
+ARQUIVO_TSP = os.path.join("problemas_json", "ulysses16.json")
 
-ARQUIVO_RESULTADOS = "resultados_tsp.csv"
+ARQUIVO_RESULTADOS = os.path.join("resultados", "resultados_tsp.csv")
 
 # Quantidade de vezes que cada algoritmo será executado
 # para cada quantidade de cidades.
@@ -27,7 +29,28 @@ INICIO = 0
 # Se for um número:
 #   o experimento poderá ser reproduzido
 #   exatamente em outra execução.
-SEED_EXPERIMENTO = 12345
+SEED_EXPERIMENTO = None
+
+
+# ============================================================
+# ARGUMENTOS DA LINHA DE COMANDO
+# ============================================================
+
+parser = argparse.ArgumentParser(
+    description="Executa experimentos de buscas locais no TSP."
+)
+
+parser.add_argument(
+    "--modo",
+    choices=["concatenar", "sobrescrever"],
+    default="concatenar",
+    help=(
+        "Define como salvar os resultados. "
+        "O padrão é concatenar."
+    )
+)
+
+args = parser.parse_args()
 
 
 # ============================================================
@@ -35,7 +58,7 @@ SEED_EXPERIMENTO = 12345
 # ============================================================
 
 with open(
-    "./problemas_json/" + ARQUIVO_TSP,
+    ARQUIVO_TSP,
     "r"
 ) as arquivo:
 
@@ -64,6 +87,27 @@ def custo_rota(
         ]
 
     return custo
+
+
+# ============================================================
+# SERIALIZAR CAMINHO
+# ============================================================
+
+def serializar_caminho(caminho):
+    """
+    Converte a sequência de rotas visitadas em uma única string
+    adequada para armazenamento no CSV.
+
+    Cada rota é separada por ";"
+    e cada cidade da rota por ",".
+    """
+    if caminho is None:
+        return ""
+
+    return ";".join(
+        ",".join(str(cidade) for cidade in rota)
+        for rota in caminho
+    )
 
 
 # ============================================================
@@ -111,12 +155,17 @@ def subida_de_encosta(
         distancias
     )
 
+    nos_expandidos = 0
+    caminho = [rota_atual.copy()]
+
     # Com apenas 2 cidades, não existe
     # nenhuma troca possível entre cidades internas.
     if len(rota_atual) <= 3:
         return (
             rota_atual,
-            custo_atual
+            custo_atual,
+            nos_expandidos,
+            caminho
         )
 
     for _ in range(iter_max):
@@ -140,9 +189,10 @@ def subida_de_encosta(
                     vizinho[i]
                 )
 
-                vizinhos.append(
-                    vizinho
-                )
+                vizinhos.append(vizinho)
+
+        # Cada vizinho gerado é um estado candidato avaliado.
+        nos_expandidos += len(vizinhos)
 
         melhor_vizinho = min(
             vizinhos,
@@ -162,17 +212,26 @@ def subida_de_encosta(
 
             return (
                 rota_atual,
-                custo_atual
+                custo_atual,
+                nos_expandidos,
+                caminho
             )
 
         rota_atual = melhor_vizinho
 
         custo_atual = custo_vizinho
 
+        caminho.append(
+            rota_atual.copy()
+        )
+
     return (
         rota_atual,
-        custo_atual
+        custo_atual,
+        nos_expandidos,
+        caminho
     )
+
 
 
 # ============================================================
@@ -196,10 +255,15 @@ def simulated_annealing(
         distancias
     )
 
+    nos_expandidos = 0
+    caminho = [rota_atual.copy()]
+
     if len(rota_atual) <= 3:
         return (
             rota_atual,
-            custo_atual
+            custo_atual,
+            nos_expandidos,
+            caminho
         )
 
     melhor_rota = rota_atual.copy()
@@ -217,6 +281,8 @@ def simulated_annealing(
             rota_atual,
             rng
         )
+
+        nos_expandidos += 1
 
         custo_vizinho = custo_rota(
             vizinho,
@@ -242,6 +308,10 @@ def simulated_annealing(
 
             custo_atual = custo_vizinho
 
+            caminho.append(
+                rota_atual.copy()
+            )
+
             if custo_atual < melhor_custo:
 
                 melhor_rota = (
@@ -258,7 +328,9 @@ def simulated_annealing(
 
     return (
         melhor_rota,
-        melhor_custo
+        melhor_custo,
+        nos_expandidos,
+        caminho
     )
 
 
@@ -284,11 +356,16 @@ def simulated_annealing_reaquecimento(
         distancias
     )
 
+    nos_expandidos = 0
+    caminho = [rota_atual.copy()]
+
     if len(rota_atual) <= 3:
         return (
             rota_atual,
             custo_atual,
-            0
+            0,
+            nos_expandidos,
+            caminho
         )
 
     melhor_rota = rota_atual.copy()
@@ -326,6 +403,8 @@ def simulated_annealing_reaquecimento(
             rng
         )
 
+        nos_expandidos += 1
+
         custo_vizinho = custo_rota(
             vizinho,
             distancias
@@ -354,6 +433,10 @@ def simulated_annealing_reaquecimento(
 
             custo_atual = custo_vizinho
 
+            caminho.append(
+                rota_atual.copy()
+            )
+
             if custo_atual < melhor_custo:
 
                 melhor_rota = (
@@ -375,7 +458,9 @@ def simulated_annealing_reaquecimento(
     return (
         melhor_rota,
         melhor_custo,
-        reaquecimentos_realizados
+        reaquecimentos_realizados,
+        nos_expandidos,
+        caminho
     )
 
 
@@ -482,6 +567,8 @@ cabecalho = [
     "seed",
     "custo",
     "tempo_ms",
+    "nos_expandidos",
+    "caminho",
     "reaquecimentos"
 ]
 
@@ -630,7 +717,9 @@ for quantidade_cidades in range(
 
         (
             rota_hc,
-            custo_hc
+            custo_hc,
+            nos_expandidos_hc,
+            caminho_hc
         ) = subida_de_encosta(
             rota_inicial,
             distancias
@@ -663,6 +752,12 @@ for quantidade_cidades in range(
             "tempo_ms":
                 tempo_hc,
 
+            "nos_expandidos":
+                nos_expandidos_hc,
+
+            "caminho":
+                serializar_caminho(caminho_hc),
+
             "reaquecimentos":
                 0
         })
@@ -677,7 +772,9 @@ for quantidade_cidades in range(
 
         (
             rota_sa,
-            custo_sa
+            custo_sa,
+            nos_expandidos_sa,
+            caminho_sa
         ) = simulated_annealing(
             rota_inicial,
             distancias,
@@ -711,6 +808,12 @@ for quantidade_cidades in range(
             "tempo_ms":
                 tempo_sa,
 
+            "nos_expandidos":
+                nos_expandidos_sa,
+
+            "caminho":
+                serializar_caminho(caminho_sa),
+
             "reaquecimentos":
                 0
         })
@@ -726,7 +829,9 @@ for quantidade_cidades in range(
         (
             rota_sa_r,
             custo_sa_r,
-            reaquecimentos
+            reaquecimentos,
+            nos_expandidos_sa_r,
+            caminho_sa_r
         ) = simulated_annealing_reaquecimento(
             rota_inicial,
             distancias,
@@ -760,6 +865,12 @@ for quantidade_cidades in range(
             "tempo_ms":
                 tempo_sa_r,
 
+            "nos_expandidos":
+                nos_expandidos_sa_r,
+
+            "caminho":
+                serializar_caminho(caminho_sa_r),
+
             "reaquecimentos":
                 reaquecimentos
         })
@@ -771,9 +882,24 @@ for quantidade_cidades in range(
 # SALVAR CSV
 # ============================================================
 
+os.makedirs(
+    os.path.dirname(ARQUIVO_RESULTADOS),
+    exist_ok=True
+)
+
+modo_arquivo = (
+    "w"
+    if args.modo == "sobrescrever"
+    else "a"
+)
+
+arquivo_existe = os.path.exists(
+    ARQUIVO_RESULTADOS
+)
+
 with open(
     ARQUIVO_RESULTADOS,
-    "w",
+    modo_arquivo,
     newline="",
     encoding="utf-8"
 ) as arquivo:
@@ -783,7 +909,11 @@ with open(
         fieldnames=cabecalho
     )
 
-    escritor.writeheader()
+    if (
+        args.modo == "sobrescrever"
+        or not arquivo_existe
+    ):
+        escritor.writeheader()
 
     escritor.writerows(
         resultados
@@ -815,4 +945,9 @@ print(
 print(
     f"Resultados salvos em: "
     f"{ARQUIVO_RESULTADOS}"
+)
+
+print(
+    f"Modo de salvamento: "
+    f"{args.modo}"
 )
