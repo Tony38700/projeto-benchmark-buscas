@@ -16,7 +16,7 @@ ARQUIVO_RESULTADOS = os.path.join("resultados", "resultados_tsp.csv")
 
 # Quantidade de vezes que cada algoritmo será executado
 # para cada quantidade de cidades.
-N_EXECUCOES = 10
+N_EXECUCOES = 200
 
 # Cidade inicial da rota
 INICIO = 0
@@ -569,6 +569,7 @@ cabecalho = [
     "tempo_ms",
     "nos_expandidos",
     "caminho",
+    "melhor_rota",
     "reaquecimentos"
 ]
 
@@ -758,6 +759,9 @@ for quantidade_cidades in range(
             "caminho":
                 serializar_caminho(caminho_hc),
 
+            "melhor_rota":
+                ",".join(str(cidade) for cidade in rota_hc),
+
             "reaquecimentos":
                 0
         })
@@ -813,6 +817,9 @@ for quantidade_cidades in range(
 
             "caminho":
                 serializar_caminho(caminho_sa),
+
+            "melhor_rota":
+                ",".join(str(cidade) for cidade in rota_sa),
 
             "reaquecimentos":
                 0
@@ -870,6 +877,9 @@ for quantidade_cidades in range(
 
             "caminho":
                 serializar_caminho(caminho_sa_r),
+
+            "melhor_rota":
+                ",".join(str(cidade) for cidade in rota_sa_r),
 
             "reaquecimentos":
                 reaquecimentos
