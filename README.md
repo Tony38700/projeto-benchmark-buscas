@@ -217,7 +217,7 @@ Uma solução de busca local com baixo custo também não deve ser automaticamen
 
 ## Integrantes
 
-- Ana Clara
-- Antônio Lucas
+- Ana Clara Oliveira
+- Antônio Lucas Nascimento
 - Enzo Guimarães
 - Gabriel Gonçalves
